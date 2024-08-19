@@ -5,6 +5,7 @@ import axios from 'axios';
 
 import "./App.css";
 
+// 이미지 파일 임포트
 import DROUGHT from './conponent/img/가뭄.png';
 import TYPNOON from './conponent/img/산불.png';
 import TSUNAMI from './conponent/img/쓰나미.png';
@@ -27,22 +28,26 @@ import Img3 from './conponent/img/하이브리드 이미지.png';
 import Img4 from './conponent/img/지형이미지.png';
 
 const App = () => {
-  const viewDivRef = useRef(null); 
+  const viewDivRef = useRef(null);
   const searchInputRef = useRef(null);
   const modalRef = useRef(null);
-  const disasterModalRef = useRef(null); // 자연재해 모달의 ref
-  const [searchText, setSearchText] = useState(""); 
-  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState([]); 
-  const [coordinates, setCoordinates] = useState(null); 
-  const [origin, setOrigin] = useState(null); 
-  const [destination, setDestination] = useState(null); 
-  const [mode, setMode] = useState("search"); 
-  const [basemap, setBasemap] = useState("streets"); 
-  const [showModal, setShowModal] = useState(false); 
-  const [showDisasterModal, setShowDisasterModal] = useState(false); // 자연재해 모달 표시 여부
-  const [selectedDisaster, setSelectedDisaster] = useState(TYPHOON); 
-  const main_address = "https://apis.wemap.asia"; 
-  const key_address = "YZkGTFFioePZWDhTolBEFiRFJHDbanHW"; 
+  const disasterModalRef = useRef(null);
+
+  const [searchText, setSearchText] = useState("");
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState([]);
+  const [coordinates, setCoordinates] = useState(null);
+  const [origin, setOrigin] = useState(null);
+  const [destination, setDestination] = useState(null);
+  const [basemap, setBasemap] = useState("streets");
+  const [showModal, setShowModal] = useState(false);
+  const [showDisasterModal, setShowDisasterModal] = useState(false);
+  const [selectedDisaster, setSelectedDisaster] = useState(TYPHOON);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+
+  const [riskAreas, setRiskAreas] = useState({ high_risk_areas: [], medium_risk_areas: [], low_risk_areas: [] });
+
+  const main_address = "https://apis.wemap.asia";
+  const key_address = "YZkGTFFioePZWDhTolBEFiRFJHDbanHW";
 
   const [Img_type, setImg_type] = useState("기본이미지");
 
@@ -64,27 +69,39 @@ const App = () => {
   ];
 
   const selectImgType = (type, label) => {
-    setBasemap(type); 
-    setImg_type(label); 
-    setShowModal(false); 
+    setBasemap(type);
+    setImg_type(label);
+    setShowModal(false);
   };
 
   const handleDisasterClick = (modalImg, img) => {
-    setSelectedDisaster(img); // 기본 지도에서 사용할 이미지로 설정
-    setShowDisasterModal(false); // 모달 닫기
+    setSelectedDisaster(img);
+    setShowDisasterModal(false);
   };
 
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((position) => {
         const { latitude, longitude } = position.coords;
-        setOrigin([longitude, latitude]); 
-        setCoordinates([longitude, latitude]); 
+        setOrigin([longitude, latitude]);
+        setCoordinates([104.96840217998864, 11.159358011794003]);
+
+        const fetchRiskAreas = async () => {
+          try {
+            const response = await axios.get('http://172.20.10.12:5003/api/flood-risk/5/');
+            console.log("Fetched risk areas:", response.data);
+            setRiskAreas(response.data);
+          } catch (error) {
+            console.error('Error fetching risk areas:', error);
+          }
+        };
+
+        fetchRiskAreas();
       }, () => {
-        setCoordinates([21.0285, 105.8542]); 
+        setCoordinates([21.0285, 105.8542]);
       });
     } else {
-      setCoordinates([21.0285, 105.8542]); 
+      setCoordinates([21.0285, 105.8542]);
     }
   }, []);
 
@@ -92,18 +109,18 @@ const App = () => {
     if (coordinates) {
       initializeMap(coordinates);
     }
-  }, [coordinates, basemap]); 
+  }, [coordinates, basemap, riskAreas]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (searchInputRef.current && !searchInputRef.current.contains(event.target)) {
-        setAutocompleteSuggestions([]); 
+        setShowAutocomplete(false);
       }
       if (modalRef.current && !modalRef.current.contains(event.target)) {
-        setShowModal(false); 
+        setShowModal(false);
       }
       if (disasterModalRef.current && !disasterModalRef.current.contains(event.target)) {
-        setShowDisasterModal(false); 
+        setShowDisasterModal(false);
       }
     };
 
@@ -115,68 +132,73 @@ const App = () => {
   }, []);
 
   const initializeMap = async (coordinates) => {
-    const [Map, MapView, Graphic, GraphicsLayer, Polygon] = await loadModules([
+    const [Map, MapView, Graphic, GraphicsLayer, Polygon, geometryEngine] = await loadModules([
       'esri/Map',
       'esri/views/MapView',
       'esri/Graphic',
       'esri/layers/GraphicsLayer',
-      'esri/geometry/Polygon'
+      'esri/geometry/Polygon',
+      'esri/geometry/geometryEngine'
     ]);
 
     const map = new Map({
-      basemap: basemap 
+      basemap: basemap
     });
 
     const view = new MapView({
-      container: viewDivRef.current, 
+      container: viewDivRef.current,
       map: map,
-      center: coordinates, 
-      zoom: 13 
+      center: coordinates,
+      zoom: 8
     });
 
     const graphicsLayer = new GraphicsLayer();
     map.add(graphicsLayer);
 
-    addMarker(graphicsLayer, coordinates, 'blue'); 
+    addMarker(graphicsLayer, coordinates, 'blue');
 
-    const polygon = new Polygon({
-      rings: [
-        [105.85, 21.02],
-        [105.86, 21.02],
-        [105.86, 21.03],
-        [105.85, 21.03],
-        [105.85, 21.02]
-      ]
-    });
-
-    const fillSymbol = {
-      type: 'simple-fill', 
-      color: [227, 139, 79, 0.8], 
-      outline: {
-        color: [255, 255, 255],
-        width: 1
+    const mergePolygons = (areas, color) => {
+      if (areas && areas.length > 0) {
+        areas.forEach(areaGroup => {
+          if (areaGroup && areaGroup.length > 0) {
+            const polygon = new Polygon({
+              rings: [areaGroup]
+            });
+    
+            const fillSymbol = {
+              type: 'simple-fill',
+              color: color,
+              outline: {
+                color: [255, 255, 255],
+                width: 1
+              }
+            };
+    
+            const polygonGraphic = new Graphic({
+              geometry: polygon,
+              symbol: fillSymbol
+            });
+    
+            graphicsLayer.add(polygonGraphic);
+          }
+        });
       }
     };
-
-    const polygonGraphic = new Graphic({
-      geometry: polygon,
-      symbol: fillSymbol
-    });
-
-    graphicsLayer.add(polygonGraphic); 
-
-    view.on("click", (event) => {
-      if (mode === "route") {
-        const { latitude, longitude } = event.mapPoint;
-        if (!origin) {
-          setOrigin([longitude, latitude]); 
-          addMarker(graphicsLayer, [longitude, latitude], 'green'); 
-        } else if (!destination) {
-          setDestination([longitude, latitude]); 
-          addMarker(graphicsLayer, [longitude, latitude], 'red'); 
-        }
-      }
-    });
+    
+    // 고위험 지역 폴리곤 추가
+    mergePolygons(riskAreas.high_risk_areas, [0, 255, 0, 0.5]);
+    
+    // 중위험 지역 폴리곤 추가
+    if (riskAreas.medium_risk_areas && riskAreas.medium_risk_areas.length > 0) {
+      console.log("(중)있음");
+      mergePolygons(riskAreas.medium_risk_areas, [255, 165, 0, 0.5]);
+    }
+    
+    // 저위험 지역 폴리곤 추가
+    if (riskAreas.low_risk_areas && riskAreas.low_risk_areas.length > 0) {
+      console.log("(위험)있음");
+      mergePolygons(riskAreas.low_risk_areas, [255, 0, 0, 0.5]);
+    }
   };
 
   const addMarker = (graphicsLayer, coordinates, color) => {
@@ -201,7 +223,7 @@ const App = () => {
         symbol: markerSymbol
       });
 
-      graphicsLayer.add(pointGraphic); 
+      graphicsLayer.add(pointGraphic);
     });
   };
 
@@ -210,7 +232,7 @@ const App = () => {
       const response = await axios.get(`${main_address}/geocode-1/search?text=${searchText}&key=${key_address}`);
       if (response.data.features && response.data.features.length > 0) {
         const coordinates = response.data.features[0].geometry.coordinates;
-        setCoordinates(coordinates); 
+        setCoordinates(coordinates);
       } else {
         console.error('No features found in response.');
       }
@@ -221,9 +243,10 @@ const App = () => {
 
   const fetchAutocomplete = async (query) => {
     try {
-      const response = await axios.get(`${main_address}/geocode-1/autocomplete?text=${query}&key={key_address}`);
+      const response = await axios.get(`${main_address}/geocode-1/autocomplete?text=${query}&key=${key_address}`);
       if (response.data.features) {
-        setAutocompleteSuggestions(response.data.features); 
+        setAutocompleteSuggestions(response.data.features);
+        setShowAutocomplete(true);
       }
     } catch (error) {
       console.error('Error fetching autocomplete data:', error);
@@ -232,18 +255,20 @@ const App = () => {
 
   const handleSelectSuggestion = (suggestion) => {
     setSearchText(suggestion.properties.label);
-    setAutocompleteSuggestions([]); 
-    fetchAddress(); 
+    setAutocompleteSuggestions([]);
+    setShowAutocomplete(false);
+    fetchAddress();
   };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    fetchAddress(); 
+    fetchAddress();
   };
 
   return (
     <div className="app-container">
-      <div ref={viewDivRef} className="map-container"></div> 
+      <div ref={viewDivRef} className="map-container"></div>
+  
       <div className="search_container">
         <form onSubmit={handleSearchSubmit} className="search-form" ref={searchInputRef}>
           <>
@@ -253,14 +278,14 @@ const App = () => {
               onChange={(e) => {
                 setSearchText(e.target.value);
                 fetchAutocomplete(e.target.value); 
-              }} 
+              }}
               onFocus={() => fetchAutocomplete(searchText)} 
               placeholder="Search for a location" 
             />
             <button type="submit" className="search-button">검색</button>
           </>
-          {autocompleteSuggestions.length > 0 && (
-            <ul className="autocomplete-suggestions">
+          {showAutocomplete && autocompleteSuggestions.length > 0 && (
+            <ul className="search_modal autocomplete-suggestions">
               {autocompleteSuggestions.map((suggestion, index) => (
                 <li 
                   key={index} 
@@ -272,6 +297,7 @@ const App = () => {
             </ul>
           )}
         </form>
+        
         <div className='search_sub_container'>
           <div onClick={() => setShowModal(!showModal)} className="basemap-selector">
             <div className="basemap-slider">
@@ -288,6 +314,7 @@ const App = () => {
           <img src={selectedDisaster} alt="Selected Disaster" className='weather_choice' onClick={() => setShowDisasterModal(!showDisasterModal)}/>
         </div>
       </div>
+  
       {showModal && (
         <div ref={modalRef} className="modal-content autocomplete-suggestions">
           <ul className='ul_im'>
@@ -300,6 +327,7 @@ const App = () => {
           </ul>
         </div>
       )}
+  
       {showDisasterModal && (
         <div ref={disasterModalRef} className="modal-content2 autocomplete-suggestions">
         <div className="disaster-grid">
