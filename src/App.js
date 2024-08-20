@@ -3,6 +3,8 @@ import '@arcgis/core/assets/esri/themes/light/main.css';
 import { loadModules } from 'esri-loader';
 import axios from 'axios';
 
+import CustomSelect from './CustomSelect';
+
 import "./App.css";
 
 // 이미지 파일 임포트
@@ -41,9 +43,13 @@ const App = () => {
   const [basemap, setBasemap] = useState("streets");
   const [showModal, setShowModal] = useState(false);
   const [showDisasterModal, setShowDisasterModal] = useState(false);
-  const [selectedDisaster, setSelectedDisaster] = useState(TYPHOON);
+  const [selectedDisaster, setSelectedDisaster] = useState(LANDSFIRE);
+  const [disasterType, setDisasterType] = useState('flood-risk'); // 초기 값은 홍수
   const [showAutocomplete, setShowAutocomplete] = useState(false);
 
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const [day, setDay] = useState(8);
   const [riskAreas, setRiskAreas] = useState({ high_risk_areas: [], medium_risk_areas: [], low_risk_areas: [] });
 
   const main_address = "https://apis.wemap.asia";
@@ -59,13 +65,9 @@ const App = () => {
   ];
 
   const disasterOptions = [
-    { name: "가뭄", img: DROUGHT, modalImg: CH_DROUGHT },
-    { name: "산불", img: TYPNOON, modalImg: CH_TYPNOON },
-    { name: "쓰나미", img: TSUNAMI, modalImg: CH_TSUNAMI },
-    { name: "산사태", img: LANDSLIDE, modalImg: CH_LANDSLIDE },
-    { name: "홍수", img: LANDSFIRE, modalImg: CH_LANDSFIRE },
-    { name: "지진", img: WILDFILE, modalImg: CH_WILDFILE },
-    { name: "태풍", img: TYPHOON, modalImg: CH_TYPHOON }
+    { name: "홍수", img: LANDSFIRE, modalImg: CH_LANDSFIRE, type: 'flood-risk' },
+    { name: "가뭄", img: DROUGHT, modalImg: CH_DROUGHT, type: 'drought-risk' },
+    { name: "산불", img: TYPNOON, modalImg: CH_TYPNOON, type: 'fire-risk' },
   ];
 
   const selectImgType = (type, label) => {
@@ -74,10 +76,30 @@ const App = () => {
     setShowModal(false);
   };
 
-  const handleDisasterClick = (modalImg, img) => {
+  const handleDisasterClick = (modalImg, img, type) => {
     setSelectedDisaster(img);
+    setDisasterType(type); // 선택된 재해 유형에 따라 URL을 변경
     setShowDisasterModal(false);
   };
+
+  const fetchRiskAreas = async (month) => {
+    setIsLoading(true);
+    try {
+      const response = await axios.get(`http://172.20.10.4:5003/api/${disasterType}/${month}/`);
+      console.log("Fetched risk areas:", response.data);
+      setRiskAreas(response.data);
+    } catch (error) {
+      console.error('Error fetching risk areas:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const LoadingSpinner = () => (
+    <div className="loading-spinner">
+      <div className="spinner"></div>
+    </div>
+  );
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -86,17 +108,7 @@ const App = () => {
         setOrigin([longitude, latitude]);
         setCoordinates([104.96840217998864, 11.159358011794003]);
 
-        const fetchRiskAreas = async () => {
-          try {
-            const response = await axios.get('http://172.20.10.12:5003/api/flood-risk/5/');
-            console.log("Fetched risk areas:", response.data);
-            setRiskAreas(response.data);
-          } catch (error) {
-            console.error('Error fetching risk areas:', error);
-          }
-        };
-
-        fetchRiskAreas();
+        fetchRiskAreas(day);
       }, () => {
         setCoordinates([21.0285, 105.8542]);
       });
@@ -104,6 +116,10 @@ const App = () => {
       setCoordinates([21.0285, 105.8542]);
     }
   }, []);
+
+  useEffect(() => {
+    fetchRiskAreas(day);
+  }, [day, disasterType]);
 
   useEffect(() => {
     if (coordinates) {
@@ -140,23 +156,30 @@ const App = () => {
       'esri/geometry/Polygon',
       'esri/geometry/geometryEngine'
     ]);
-
+  
     const map = new Map({
       basemap: basemap
     });
-
+  
     const view = new MapView({
       container: viewDivRef.current,
       map: map,
       center: coordinates,
       zoom: 8
     });
-
+  
     const graphicsLayer = new GraphicsLayer();
     map.add(graphicsLayer);
-
+  
     addMarker(graphicsLayer, coordinates, 'blue');
-
+  
+    // 홍수일 때와 다른 재해일 때 색상을 구분
+    const isFlood = selectedDisaster === LANDSFIRE;
+  
+    const highRiskColor = isFlood ? [0, 255, 0, 0.5] : [255, 0, 0, 0.5]; // 홍수일 때 반전된 색상
+    const lowRiskColor = isFlood ? [255, 0, 0, 0.5] : [0, 255, 0, 0.5];  // 홍수일 때 반전된 색상
+    const mediumRiskColor = [255, 165, 0, 0.5]; // 중위험 색상은 동일
+  
     const mergePolygons = (areas, color) => {
       if (areas && areas.length > 0) {
         areas.forEach(areaGroup => {
@@ -164,7 +187,7 @@ const App = () => {
             const polygon = new Polygon({
               rings: [areaGroup]
             });
-    
+  
             const fillSymbol = {
               type: 'simple-fill',
               color: color,
@@ -173,33 +196,24 @@ const App = () => {
                 width: 1
               }
             };
-    
+  
             const polygonGraphic = new Graphic({
               geometry: polygon,
               symbol: fillSymbol
             });
-    
+  
             graphicsLayer.add(polygonGraphic);
           }
         });
       }
     };
-    
-    // 고위험 지역 폴리곤 추가
-    mergePolygons(riskAreas.high_risk_areas, [0, 255, 0, 0.5]);
-    
-    // 중위험 지역 폴리곤 추가
-    if (riskAreas.medium_risk_areas && riskAreas.medium_risk_areas.length > 0) {
-      console.log("(중)있음");
-      mergePolygons(riskAreas.medium_risk_areas, [255, 165, 0, 0.5]);
-    }
-    
-    // 저위험 지역 폴리곤 추가
-    if (riskAreas.low_risk_areas && riskAreas.low_risk_areas.length > 0) {
-      console.log("(위험)있음");
-      mergePolygons(riskAreas.low_risk_areas, [255, 0, 0, 0.5]);
-    }
+  
+    // 각 위험도에 맞는 색상을 적용
+    mergePolygons(riskAreas.high_risk_areas, highRiskColor);
+    mergePolygons(riskAreas.medium_risk_areas, mediumRiskColor);
+    mergePolygons(riskAreas.low_risk_areas, lowRiskColor);
   };
+  
 
   const addMarker = (graphicsLayer, coordinates, color) => {
     const point = {
@@ -265,8 +279,14 @@ const App = () => {
     fetchAddress();
   };
 
+  const handleMonthChange = (e) => {
+    const selectedMonth = parseInt(e.target.value, 10);
+    setDay(selectedMonth);
+  };
+
   return (
     <div className="app-container">
+      {isLoading && <LoadingSpinner />}
       <div ref={viewDivRef} className="map-container"></div>
   
       <div className="search_container">
@@ -299,6 +319,7 @@ const App = () => {
         </form>
         
         <div className='search_sub_container'>
+        <CustomSelect value={day} onChange={handleMonthChange} />
           <div onClick={() => setShowModal(!showModal)} className="basemap-selector">
             <div className="basemap-slider">
               {imgTypes.map((imgType, index) => (
@@ -311,8 +332,10 @@ const App = () => {
               ))}
             </div>
           </div>
-          <img src={selectedDisaster} alt="Selected Disaster" className='weather_choice' onClick={() => setShowDisasterModal(!showDisasterModal)}/>
+        <img src={selectedDisaster} alt="Selected Disaster" className='weather_choice' onClick={() => setShowDisasterModal(!showDisasterModal)}/>
+
         </div>
+
       </div>
   
       {showModal && (
@@ -335,7 +358,7 @@ const App = () => {
             <div 
               key={index} 
               className={`disaster-option ${selectedDisaster === disaster.img ? 'selected-disaster' : ''}`}
-              onClick={() => handleDisasterClick(disaster.modalImg, disaster.img)}
+              onClick={() => handleDisasterClick(disaster.modalImg, disaster.img, disaster.type)}
             >
               <img src={disaster.modalImg} alt={disaster.name} className="disaster-img"/>
               <span>{disaster.name}</span>

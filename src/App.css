@@ -89,8 +89,8 @@
   cursor: pointer;
   background-color: #f0f0f0;
   border-radius: 10px;
-  height: 3vh;
-  padding: 5px;
+  height: 4vh;
+  padding: 0.3rem;
 }
 
 .basemap-slider {
@@ -330,4 +330,118 @@
     width: 5vw;
     height: 7vh;
   }
+}
+
+
+
+.loading-spinner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #f3f3f3;
+  border-top: 5px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+
+/* Custom Select Styles */
+.custom-select {
+  position: relative;
+  width: 100%;
+  margin-right: 10px;
+}
+
+.pl {
+  width: 100%;
+  border: 1px solid #C4C4C4;
+  box-sizing: border-box;
+  border-radius: 10px;
+  padding: 12px 13px;
+  font-family: 'Roboto', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 16px;
+  background-size: 10px;
+  appearance: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+
+.pl:focus {
+  border: 1px solid #9B51E0;
+  outline: 3px solid #F8E4FF;
+  border-radius: 10px;
+}
+
+.listbox {
+  position: absolute;
+  width: 100%;
+  list-style: none;
+  background: #FFFFFF;
+  border: 1px solid #C4C4C4;
+  box-sizing: border-box;
+  box-shadow: 4px 4px 14px rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  margin-top: 9px;
+  z-index: 1000;
+  padding: 0;
+}
+
+.list {
+  width: 100%;
+  border: none;
+  background-color: #FFFFFF;
+  font-family: 'Roboto', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 16px;
+  padding: 7px 10px;
+  margin: 5px 0;
+  box-sizing: border-box;
+  text-align: left;
+  cursor: pointer;
+}
+
+.list:hover, .list:focus {
+  background: #F8E4FF;
+  border-radius: 8px;
+}
+
+.search_container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.search_sub_container {
+  flex: 1 0 140px;
+}
+
+.search-form {
+  flex: 1 0 120px;
+}
+
+.weather_choice {
+  flex: 1 0 60px;
 }
